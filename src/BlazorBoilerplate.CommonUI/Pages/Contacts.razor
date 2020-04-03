@@ -1,0 +1,193 @@
+﻿@page "/contacts"
+@using BlazorBoilerplate.Shared.Dto.Sample
+@using BlazorBoilerplate.Shared.Dto.Account
+@*@attribute [Authorize] Uncomment to Secure this page*@
+@inject IMatToaster matToaster
+@inject HttpClient Http
+@inject AppState appState
+
+@using System.Net
+
+<h1>Business Contacts</h1>
+
+<MatTable Class="mat-elevation-z2" Items="@contacts" LoadInitialData="true" Striped="true" FilterByColumnName="Name" DebounceMilliseconds="150" AllowSelection="false" PageSize="5">
+    <MatTableHeader>
+        <th>
+            <div style="width:100%;">
+                <MatButton Icon="playlist_add" Label="New" OnClick="@((e) => OpenDialog())" Raised="true"></MatButton>
+            </div>
+        </th>
+        <th>Id</th>
+        <th>Name</th>
+        <th style="min-width:180px;">Email</th>
+        <th>Address</th>
+    </MatTableHeader>
+    <MatTableRow Context="ContactRow">
+        <td align="center">
+            <MatIconButton Icon="delete" OnClick="@(() => OpenDeleteDialog(ContactRow.Id))"></MatIconButton>
+        </td>
+        <td>@String.Format("{0:d}", ContactRow.Id)</td>
+        <td><MatTextField TValue="string" Value="@ContactRow.Name" ValueChanged="@((item) => { ContactRow.Name = item; Update(ContactRow); })" Dense="true" InputStyle="min-width:240px"></MatTextField></td>
+        <td><MatTextField TValue="string" Value="@ContactRow.Email" ValueChanged="@((item) => { ContactRow.Email = item; Update(ContactRow); })" Dense="true" InputStyle="min-width:240px"></MatTextField></td>
+        <td>
+            <MatTextField TValue="string" Value="@ContactRow.Address.Number" ValueChanged="@((item) => { ContactRow.Address.Number = item; Update(ContactRow); })" Label="#" FullWidth="false" Required="false" Dense="true" InputStyle="max-width:70px"></MatTextField>
+            <MatTextField TValue="string" Value="@ContactRow.Address.Street" ValueChanged="@((item) => { ContactRow.Address.Street = item; Update(ContactRow); })" Label="Street" FullWidth="false" Required="false" Dense="true" InputStyle="max-width:240px"></MatTextField>
+            <MatTextField TValue="string" Value="@ContactRow.Address.City" ValueChanged="@((item) => { ContactRow.Address.City = item; Update(ContactRow); })" Label="City" FullWidth="false" Required="false" Dense="true" InputStyle="max-width:200px"></MatTextField>
+            <MatTextField TValue="string" Value="@ContactRow.Address.State" ValueChanged="@((item) => { ContactRow.Address.State = item; Update(ContactRow); })" Label="State" FullWidth="false" Required="false" Dense="true" InputStyle="max-width:70px"></MatTextField>
+            <MatTextField TValue="string" Value="@ContactRow.Address.Zip" ValueChanged="@((item) => { ContactRow.Address.Zip = item; Update(ContactRow); })" Label="Zip" FullWidth="false" Required="false"></MatTextField>
+        </td>
+    </MatTableRow>
+</MatTable>
+
+<MatDialog @bind-IsOpen="@dialogIsOpen">
+    <MatDialogTitle>Create Contact</MatDialogTitle>
+    <MatDialogContent>
+        <EditForm Model="@contact" OnValidSubmit="@CreateContact">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <fieldset>
+                <div class="form-group">
+                    <MatTextField @bind-Value="@contact.Name" Label="Name" Icon="title" IconTrailing="true" FullWidth="true" Required="true"></MatTextField>
+                    <MatTextField @bind-Value="@contact.Email" Label="Email" Icon="email" IconTrailing="false" FullWidth="true" Required="false"></MatTextField>
+                </div>
+                <div class="form-group">
+                    <MatTextField @bind-Value="@contact.Address.Street" Label="Street" FullWidth="true" Required="false"></MatTextField>
+                    <MatTextField @bind-Value="@contact.Address.Number" Label="#" FullWidth="true" Required="false"></MatTextField>
+                    <MatTextField @bind-Value="@contact.Address.City" Label="City" FullWidth="true" Required="false"></MatTextField>
+                    <MatTextField @bind-Value="@contact.Address.State" Label="State" FullWidth="true" Required="false"></MatTextField>
+                    <MatTextField @bind-Value="@contact.Address.Country" Label="Country" FullWidth="true" Required="false"></MatTextField>
+                    <MatTextField @bind-Value="@contact.Address.Zip" Label="Zip" FullWidth="true" Required="false"></MatTextField>
+                </div>
+            </fieldset>
+        </EditForm>
+    </MatDialogContent>
+    <MatDialogActions>
+        <MatButton OnClick="@(e => { dialogIsOpen = false; })">Cancel</MatButton>
+        <MatButton OnClick="@CreateContact">Create Contact</MatButton>
+    </MatDialogActions>
+</MatDialog>
+
+<MatDialog @bind-IsOpen="@deleteDialogOpen" Style="z-index:100">
+    <MatDialogTitle><MatIcon Icon="warning"></MatIcon> Confirm Delete</MatDialogTitle>
+    <MatDialogContent>
+        Are you sure you want to delete contact "@contact.Name" ?
+    </MatDialogContent>
+    <MatDialogActions>
+        <MatButton OnClick="@(e => { deleteDialogOpen = false; })">Cancel</MatButton>
+        <MatButton OnClick="@Delete">Delete</MatButton>
+    </MatDialogActions>
+</MatDialog>
+
+@code {
+    bool deleteDialogOpen = false;
+    bool dialogIsOpen = false;
+    List<ContactDto> contacts = new List<ContactDto>();
+    ContactDto contact { get; set; } = new ContactDto();
+    UserProfileDto userProfile = new UserProfileDto();
+
+    protected override async Task OnInitializedAsync()
+    {
+        userProfile = await appState.GetUserProfile();
+        await ReadContacts();
+    }
+
+    async Task ReadContacts()
+    {
+        var apiResponse = await Http.GetFromJsonAsync<ApiResponseDto>($"api/contacts/user/{userProfile.UserId}");
+
+        if (apiResponse.StatusCode == Status200OK)
+        {
+            matToaster.Add(apiResponse.Message, MatToastType.Success, "Contact List Retrieved");
+            contacts = Newtonsoft.Json.JsonConvert.DeserializeObject<ContactDto[]>(apiResponse.Result.ToString()).ToList<ContactDto>();
+        }
+        else
+        {
+            matToaster.Add(apiResponse.Message + " : " + apiResponse.StatusCode, MatToastType.Danger, "Contacts Retrieval Failed");
+        }
+    }
+
+    public async void Update(ContactDto contact)
+    {
+        //this updates the IsCompleted flag only
+        try
+        {
+
+            ApiResponseDto apiResponse = await Http.PutJsonAsync<ApiResponseDto>("api/contacts", contact);
+
+            if (!apiResponse.IsError)
+            {
+
+                matToaster.Add(apiResponse.Message, MatToastType.Success);
+            }
+            else
+            {
+                matToaster.Add(apiResponse.Message + " : " + apiResponse.StatusCode, MatToastType.Danger, "Contact Save Failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            matToaster.Add(ex.Message, MatToastType.Danger, "Contact Save Failed");
+        }
+    }
+
+    public async Task Delete()
+    {
+        try
+        {
+            var response = await Http.DeleteAsync("api/contacts/" + contact.Id);
+            if (response.StatusCode == (HttpStatusCode)Status200OK)
+            {
+                matToaster.Add("Contact Deleted", MatToastType.Success);
+                contacts.Remove(contact);
+            }
+            else
+            {
+                matToaster.Add("Contact Delete Failed: " + response.StatusCode, MatToastType.Danger);
+            }
+            deleteDialogOpen = false;
+            contact = new ContactDto(); //reset todo after delete
+        }
+        catch (Exception ex)
+        {
+            matToaster.Add(ex.Message, MatToastType.Danger, "Contact Save Failed");
+        }
+    }
+
+    public void OpenDialog()
+    {
+        dialogIsOpen = true;
+    }
+
+    public void OpenDeleteDialog(long contactId)
+    {
+        contact = contacts.Where(x => x.Id == contactId).SingleOrDefault();
+        this.deleteDialogOpen = true;
+    }
+
+    public async Task CreateContact()
+    {
+        dialogIsOpen = false;
+        try
+        {
+            var request = contact;
+            request.UserId = userProfile.UserId;
+            ApiResponseDto apiResponse = await Http.PostJsonAsync<ApiResponseDto>("api/contacts", request);
+            if (apiResponse.StatusCode == Status200OK)
+            {
+                matToaster.Add(apiResponse.Message, MatToastType.Success);
+                contact = Newtonsoft.Json.JsonConvert.DeserializeObject<ContactDto>(apiResponse.Result.ToString());
+                contacts.Add(contact);
+                contact = new ContactDto(); //reset todo after insert
+            }
+            else
+            {
+                matToaster.Add(apiResponse.Message + " : " + apiResponse.StatusCode, MatToastType.Danger, "Contact Creation Failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            matToaster.Add(ex.Message, MatToastType.Danger, "Contact Creation Failed");
+        }
+    }
+
+}

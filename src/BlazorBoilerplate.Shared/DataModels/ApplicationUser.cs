@@ -1,0 +1,22 @@
+﻿using BlazorBoilerplate.Shared.DataInterfaces;
+using Microsoft.AspNetCore.Identity;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+
+namespace BlazorBoilerplate.Shared.DataModels
+{
+    public class ApplicationUser : IdentityUser<Guid>
+    {
+        [MaxLength(64)]
+        public string FirstName { get; set; }
+
+        [MaxLength(64)]
+        public string LastName { get; set; }
+
+        [MaxLength(64)]
+        public string FullName { get; set; }
+
+        public UserProfile Profile { get; set; }
+    }
+}
